@@ -36,12 +36,22 @@ public class PressurePlate : MonoBehaviour
             Activate();
     }
 
+    public void ActivateByStoneWeight()
+    {
+        if (activated) return;
+        activated = true;
+        DisableObject(movingColumnName);
+        DisableObject("TopMovingColumn");
+        gameObject.SetActive(false);
+    }
+
     void Activate()
     {
         activated = true;
         DisableObject(stoneName);
         DisableObject(smallStoneName);
         DisableObject(movingColumnName);
+        DisableObject("TopMovingColumn");
         gameObject.SetActive(false);
     }
 
@@ -51,3 +61,4 @@ public class PressurePlate : MonoBehaviour
         if (target != null) target.SetActive(false);
     }
 }
+
