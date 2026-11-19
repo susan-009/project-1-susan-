@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[RequireComponent(typeof(SpriteRenderer), typeof(CircleCollider2D))]
+[RequireComponent(typeof(SpriteRenderer), typeof(CapsuleCollider2D))]
 public sealed class GroundDragPlayer : MonoBehaviour
 {
     [SerializeField] private BoxCollider2D ground;
@@ -13,7 +13,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
     [SerializeField, Min(0.01f)] private float wingDashDistance = 2.5f;
     [SerializeField, Min(0.01f)] private float wingDashSpeed = 22f;
 
-    private CircleCollider2D playerCollider;
+    private CapsuleCollider2D playerCollider;
     private bool wingActive;
     private bool wingSlamming;
     private bool wingPointerHeld;
@@ -29,7 +29,6 @@ public sealed class GroundDragPlayer : MonoBehaviour
     private float verticalSpeed;
     private float dashRemaining;
 
-    private bool stoneRelocated;
     private bool stoneAnchored;
 
     public void RelocateByStone(Vector3 position)
@@ -37,12 +36,12 @@ public sealed class GroundDragPlayer : MonoBehaviour
         transform.position = position;
         targetX = position.x;
         wingSlamming = false;
+
         verticalSpeed = 0f;
         dashRemaining = 0f;
         dragging = false;
         wingAirborne = false;
         stoneAnchored = true;
-        stoneRelocated = true;
         Physics2D.SyncTransforms();
     }
 
@@ -60,9 +59,9 @@ public sealed class GroundDragPlayer : MonoBehaviour
     public void StartFalling()
     {
         stoneAnchored = false;
-        stoneRelocated = true;
         wingAirborne = true;
         wingSlamming = false;
+
         verticalSpeed = 0f;
         dashRemaining = 0f;
         dragging = false;
@@ -97,9 +96,11 @@ public sealed class GroundDragPlayer : MonoBehaviour
             followCamera.orthographicSize = viewSize;
             // Show the complete pillar area before starting the mechanism.
             yield return new WaitForSecondsRealtime(0.2f);
+
             activated = true;
             activate();
             yield return new WaitForSeconds(Mathf.Max(0f, duration) + 1f);
+
         }
         finally
         {
@@ -130,7 +131,17 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     private void Awake()
     {
-        playerCollider = GetComponent<CircleCollider2D>();
+        playerCollider = GetComponent<CapsuleCollider2D>();
+        // This controller owns displacement, gravity and collision sweeps.
+        // A dynamic body would retain falling velocity between air jumps.
+        if (TryGetComponent(out Rigidbody2D body))
+        {
+            body.bodyType = RigidbodyType2D.Kinematic;
+            body.gravityScale = 0f;
+            body.velocity = Vector2.zero;
+            body.angularVelocity = 0f;
+        }
+
         if (followCamera == null)
             followCamera = Camera.main;
 
@@ -156,7 +167,8 @@ public sealed class GroundDragPlayer : MonoBehaviour
     private void Update()
     {
         if (IsShowingPillars) return;
-        if (stoneRelocated && !wingActive)
+        // Ordinary forms use the current scene surfaces, just like a stone landing.
+        if (!wingActive)
         {
             Vector3 mousePoint = Input.mousePosition;
             if (Input.GetMouseButtonDown(0))
@@ -179,31 +191,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
             return;
         }
 
-        if (wingActive || wingAirborne || dashRemaining != 0f)
-        {
-            UpdateWingMovement();
-            return;
-        }
-
-        Vector3 mouse = Input.mousePosition;
-        if (Input.GetMouseButtonDown(0))
-        {
-            mouse.z = followCamera.WorldToScreenPoint(transform.position).z;
-            dragging = playerCollider.OverlapPoint(followCamera.ScreenToWorldPoint(mouse));
-            lastMouseX = mouse.x;
-            targetX = playerCollider.bounds.center.x;
-        }
-
-        if (!Input.GetMouseButton(0))
-            dragging = false;
-
-        if (!dragging)
-            return;
-
-        float unitsPerPixel = 2f * followCamera.orthographicSize / followCamera.pixelHeight;
-        targetX += (mouse.x - lastMouseX) * unitsPerPixel;
-        MoveAlongGround(moveSpeed * Time.deltaTime);
-        lastMouseX = mouse.x;
+        UpdateWingMovement();
     }
 
     private void UpdateWingMovement()
@@ -271,6 +259,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
             }
         }
 
+
         if (stoneAnchored) return;
         float dt = Time.deltaTime;
         if (dashRemaining != 0f)
@@ -289,6 +278,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
             if (verticalSpeed <= 0f && wingHitGround)
                 wingJumpsUsed = 0;
             wingSlamming = false;
+
             verticalSpeed = 0f;
         }
         else
@@ -296,10 +286,10 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
         if (transform.position.y < ground.bounds.min.y - 8f)
         {
-            stoneRelocated = false;
             targetX = ground.bounds.center.x;
             MoveAlongGround(float.PositiveInfinity);
             wingSlamming = false;
+
             verticalSpeed = 0f;
             dashRemaining = 0f;
             wingAirborne = false;
@@ -343,15 +333,13 @@ public sealed class GroundDragPlayer : MonoBehaviour
         Physics2D.SyncTransforms();
         Vector2 direction = step / distance;
         Vector2 center = transform.TransformPoint(playerCollider.offset);
-        Vector3 scale = transform.lossyScale;
         const float skin = 0.003f;
-        float radius = playerCollider.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
-        float castRadius = Mathf.Max(0.001f, radius - skin);
+        float radius = Mathf.Min(playerCollider.bounds.extents.x, playerCollider.bounds.extents.y);
         float allowed = distance;
         Vector2 blockingNormal = Vector2.zero;
         Collider2D blockingCollider = null;
 
-        RaycastHit2D[] hits = Physics2D.CircleCastAll(center, castRadius, direction, distance + skin);
+        RaycastHit2D[] hits = PlayerCapsuleShape.CastAll(playerCollider, center, direction, distance + skin, -skin);
         System.Array.Sort(hits, (first, second) => first.distance.CompareTo(second.distance));
         foreach (RaycastHit2D hit in hits)
         {
@@ -395,6 +383,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
         return blocked;
     }
 
+
     private static bool TrySmashBuilding(Collider2D collider)
     {
         for (Transform item = collider.transform; item != null; item = item.parent)
@@ -422,7 +411,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
             return false;
 
         Vector2 center = transform.TransformPoint(playerCollider.offset);
-        foreach (RaycastHit2D hit in Physics2D.CircleCastAll(center, radius - 0.003f, Vector2.up, rise))
+        foreach (RaycastHit2D hit in PlayerCapsuleShape.CastAll(playerCollider, center, Vector2.up, rise, -0.003f))
         {
             if (hit.collider == playerCollider || hit.collider == obstacle || hit.collider.isTrigger)
                 continue;
@@ -431,20 +420,20 @@ public sealed class GroundDragPlayer : MonoBehaviour
         }
 
         Vector2 lifted = center + Vector2.up * rise;
-        foreach (RaycastHit2D hit in Physics2D.CircleCastAll(lifted, radius - 0.003f,
-            step.normalized, step.magnitude))
+        foreach (RaycastHit2D hit in PlayerCapsuleShape.CastAll(playerCollider, lifted, step.normalized, step.magnitude, -0.003f))
         {
             if (hit.collider == playerCollider || hit.collider.isTrigger) continue;
             if (Vector2.Dot(hit.normal, step.normalized) < -0.01f) return false;
         }
 
         Vector2 target = lifted + step;
-        foreach (Collider2D other in Physics2D.OverlapCircleAll(target, radius - 0.003f))
+        foreach (Collider2D other in PlayerCapsuleShape.OverlapAll(playerCollider, target, -0.003f))
             if (other != playerCollider && !other.isTrigger)
                 return false;
 
         transform.position += new Vector3(step.x, rise, 0f);
         wingSlamming = false;
+
         verticalSpeed = 0f;
         Physics2D.SyncTransforms();
         return true;
@@ -524,6 +513,21 @@ public sealed class GroundDragPlayer : MonoBehaviour
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

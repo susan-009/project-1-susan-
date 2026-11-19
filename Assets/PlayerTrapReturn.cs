@@ -5,7 +5,7 @@ using UnityEngine;
 public sealed class PlayerTrapReturn : MonoBehaviour
 {
     private GroundDragPlayer player;
-    private CircleCollider2D ball;
+    private CapsuleCollider2D ball;
     private Collider2D landing;
     private readonly List<Collider2D> traps = new List<Collider2D>();
     private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>();
@@ -14,7 +14,7 @@ public sealed class PlayerTrapReturn : MonoBehaviour
     private void Start()
     {
         player = GetComponent<GroundDragPlayer>();
-        ball = GetComponent<CircleCollider2D>();
+        ball = GetComponent<CapsuleCollider2D>();
         GameObject destination = GameObject.Find("Wall A Landing");
         if (destination != null) landing = destination.GetComponent<Collider2D>();
         foreach (Transform item in FindObjectsOfType<Transform>())
@@ -52,8 +52,7 @@ public sealed class PlayerTrapReturn : MonoBehaviour
         // Large instantaneous relocations are teleports, not travel through traps.
         if (travel.sqrMagnitude > 0f && travel.sqrMagnitude < 9f)
         {
-            float radius = ball.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
-            Physics2D.CircleCast(previousCenter, radius, travel.normalized, filter, hits, travel.magnitude);
+            PlayerCapsuleShape.Sweep(ball, previousCenter, travel.normalized, filter, hits, travel.magnitude);
         }
 
         foreach (Collider2D trap in traps)
@@ -74,4 +73,4 @@ public sealed class PlayerTrapReturn : MonoBehaviour
         }
         previousCenter = ball.bounds.center;
     }
-}
+}

@@ -4,16 +4,17 @@ using UnityEngine;
 [DefaultExecutionOrder(550)]
 public sealed class PlayerGateSwitch : MonoBehaviour
 {
-    private CircleCollider2D ball;
+    private CapsuleCollider2D ball;
     private Collider2D contact;
     private GameObject gate;
     private Vector2 previousCenter;
     private bool activated;
+    private GateLeverVisual lever;
     private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>();
 
     private void Start()
     {
-        ball = GetComponent<CircleCollider2D>();
+        ball = GetComponent<CapsuleCollider2D>();
         GameObject button = null;
         foreach (Transform item in FindObjectsOfType<Transform>())
         {
@@ -26,6 +27,9 @@ public sealed class PlayerGateSwitch : MonoBehaviour
             enabled = false;
             return;
         }
+        lever = button.GetComponent<GateLeverVisual>();
+        if (lever == null) lever = button.AddComponent<GateLeverVisual>();
+        lever.InitializeVisual();
         contact = button.GetComponent<Collider2D>();
         if (contact == null)
         {
@@ -57,14 +61,14 @@ public sealed class PlayerGateSwitch : MonoBehaviour
             ContactFilter2D filter = new ContactFilter2D();
             filter.NoFilter();
             filter.useTriggers = true;
-            float radius = ball.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
-            Physics2D.CircleCast(previousCenter, radius, travel.normalized, filter, hits, travel.magnitude);
+            PlayerCapsuleShape.Sweep(ball, previousCenter, travel.normalized, filter, hits, travel.magnitude);
             foreach (RaycastHit2D hit in hits) touched |= hit.collider == contact;
         }
         previousCenter = center;
         if (!touched) return;
         activated = true;
+        lever.Activate();
         gate.SetActive(false);
         Physics2D.SyncTransforms();
     }
-}
+}

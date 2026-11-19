@@ -1,102 +1,151 @@
-
+using System.Collections.Generic;
 using UnityEngine;
 
+[DefaultExecutionOrder(700)]
 public class AnimalEscape : MonoBehaviour
 {
-    [Header("�ĸ�ʯ��")]
-    public GameObject[] pillars;
+    // Keep old scene references compatible. Contact now controls pickup.
+    [HideInInspector] public GameObject[] pillars;
+    [HideInInspector] public GameObject caveDoor;
+    [HideInInspector] public Transform exitPoint;
 
-    [Header("ɽ������")]
-    public GameObject caveDoor;
-    public Transform exitPoint;
-
-    [Header("�ƶ��ٶ�")]
-    public float moveSpeed = 2f;
-
-    [SerializeField, Min(0.1f)] private float pickupDistance = 0.9f;
+    [Header("跟随设置")]
+    [Min(0.1f)] public float moveSpeed = 2f;
     [SerializeField, Min(0.1f)] private float followDistance = 0.6f;
-    [SerializeField, Min(0.1f)] private float leashDistance = 3f;
 
     private bool accompanying;
     private GroundDragPlayer player;
+    private CapsuleCollider2D playerBody;
+    private CircleCollider2D animalBody;
+    private Vector2 previousPlayerCenter;
+    private Vector3 previousTarget;
+    private float pathLength;
+    private readonly Queue<Vector3> path = new Queue<Vector3>();
+    private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>();
 
     private void Start()
     {
         player = FindObjectOfType<GroundDragPlayer>();
+        if (player == null) return;
+        playerBody = player.GetComponent<CapsuleCollider2D>();
+        animalBody = GetComponent<CircleCollider2D>();
+        if (animalBody == null)
+        {
+            animalBody = gameObject.AddComponent<CircleCollider2D>();
+            SpriteRenderer sprite = GetComponent<SpriteRenderer>();
+            if (sprite != null && sprite.sprite != null)
+            {
+                animalBody.radius = Mathf.Min(sprite.sprite.bounds.extents.x, sprite.sprite.bounds.extents.y);
+                animalBody.offset = sprite.sprite.bounds.center;
+            }
+        }
+        animalBody.isTrigger = true;
+        Physics2D.SyncTransforms();
+        if (playerBody != null) previousPlayerCenter = playerBody.bounds.center;
     }
 
-    private void Update()
+    private Vector3 FollowTarget()
     {
-        if (player == null || exitPoint == null || !AllPillarsDown() || !DoorIsOpen())
-            return;
+        return new Vector3(playerBody.bounds.center.x,
+            playerBody.bounds.min.y + animalBody.bounds.extents.y + 0.005f, transform.position.z);
+    }
 
-        Vector2 separation = player.transform.position - transform.position;
+    private void LateUpdate()
+    {
+        if (playerBody == null || animalBody == null) return;
+        Physics2D.SyncTransforms();
+        Vector2 playerCenter = playerBody.bounds.center;
+        Vector2 travel = playerCenter - previousPlayerCenter;
+        previousPlayerCenter = playerCenter;
+
         if (!accompanying)
         {
-            if (separation.magnitude > pickupDistance)
-                return;
-            accompanying = true;
-        }
-
-        // Wait when the player flies away or gets too far ahead.
-        if (separation.magnitude > leashDistance || Mathf.Abs(separation.y) > 1f)
-            return;
-
-        float gap = Mathf.Abs(separation.x);
-        if (gap > followDistance)
-        {
-            float distance = Mathf.Min(gap - followDistance, moveSpeed * Time.deltaTime);
-            Vector2 direction = Vector2.right * Mathf.Sign(separation.x);
-            SpriteRenderer sprite = GetComponent<SpriteRenderer>();
-            float radius = sprite != null ? Mathf.Min(sprite.bounds.extents.x, sprite.bounds.extents.y) : 0.1f;
-            Physics2D.SyncTransforms();
-            foreach (RaycastHit2D hit in Physics2D.CircleCastAll(transform.position, radius, direction, distance))
+            bool touched = playerBody.Distance(animalBody).distance <= 0.01f;
+            if (!touched && travel.sqrMagnitude > 0.000001f && travel.sqrMagnitude < 9f)
             {
-                if (hit.collider.isTrigger || hit.collider.transform.IsChildOf(transform) ||
-                    hit.collider.transform.IsChildOf(player.transform))
-                    continue;
-                if (Vector2.Dot(hit.normal, direction) < -0.01f)
-                    distance = Mathf.Min(distance, Mathf.Max(0f, hit.distance - 0.005f));
+                ContactFilter2D filter = new ContactFilter2D();
+                filter.NoFilter();
+                filter.useTriggers = true;
+                hits.Clear();
+                PlayerCapsuleShape.Sweep(playerBody, playerCenter - travel, travel.normalized,
+                    filter, hits, travel.magnitude);
+                foreach (RaycastHit2D hit in hits) if (hit.collider == animalBody) touched = true;
             }
-            transform.position += (Vector3)(direction * distance);
+            if (!touched) return;
+            accompanying = true;
+            previousTarget = FollowTarget();
+            path.Enqueue(previousTarget);
+            pathLength = Vector3.Distance(animalBody.bounds.center, previousTarget);
         }
 
-        // Rescue completes only when both animal and escort reach the exit.
-        if (Mathf.Abs(transform.position.x - exitPoint.position.x) < 0.8f &&
-            Mathf.Abs(transform.position.y - exitPoint.position.y) < 1f &&
-            Vector2.Distance(player.transform.position, exitPoint.position) < 1.5f)
-            Destroy(gameObject);
-    }
-
-    bool AllPillarsDown()
-    {
-        foreach (GameObject pillar in pillars)
+        Vector3 target = FollowTarget();
+        float travelled = Vector3.Distance(previousTarget, target);
+        if (travelled > 3f)
         {
-            if (pillar == null) return false;
-
-            SpriteRenderer sr = pillar.GetComponent<SpriteRenderer>();
-            Collider2D col = pillar.GetComponent<Collider2D>();
-
-            if (sr == null || sr.enabled) return false;
-            if (col != null && col.enabled) return false;
+            // Respawns and Stone relocations are discontinuities, not walkable paths.
+            SetCenter(target);
+            path.Clear();
+            pathLength = 0f;
+            previousTarget = target;
+            return;
         }
+        if (travelled > 0.01f)
+        {
+            path.Enqueue(target);
+            pathLength += travelled;
+            previousTarget = target;
+        }
+        if (player.IsShowingPillars) return;
 
-        return pillars.Length == 4;
+        // Match fast player movement so sprinting never breaks the follow state.
+        float budget = Mathf.Min(Mathf.Max(0f, pathLength - followDistance),
+            Mathf.Max(moveSpeed * Time.deltaTime, travelled));
+        int iterations = 0;
+        while (path.Count > 0 && budget > 0f && iterations++ < 128)
+        {
+            Vector3 center = animalBody.bounds.center;
+            Vector3 next = path.Peek();
+            Vector2 step = next - center;
+            float distance = step.magnitude;
+            if (distance < 0.0001f) { path.Dequeue(); continue; }
+            float requested = Mathf.Min(distance, budget);
+            float allowed = ClearDistance(center, step / distance, requested);
+            if (allowed <= 0.00001f) break;
+            SetCenter(center + (Vector3)(step / distance * allowed));
+            pathLength = Mathf.Max(0f, pathLength - allowed);
+            budget -= allowed;
+            if (allowed + 0.0001f >= distance) path.Dequeue();
+            if (allowed + 0.0001f < requested) break;
+        }
     }
 
-    // ���ɽ�����Ƿ��
-    bool DoorIsOpen()
+    private float ClearDistance(Vector2 center, Vector2 direction, float distance)
     {
-        if (caveDoor == null) return false;
+        float radius = Mathf.Min(animalBody.bounds.extents.x, animalBody.bounds.extents.y);
+        float allowed = distance;
+        foreach (RaycastHit2D hit in Physics2D.CircleCastAll(center, Mathf.Max(0.001f, radius - 0.003f),
+            direction, distance + 0.003f))
+        {
+            if (hit.collider.isTrigger || hit.collider.transform.IsChildOf(transform) ||
+                hit.collider.transform.IsChildOf(player.transform)) continue;
+            Vector2 normal = hit.normal;
+            if (hit.distance < 0.0001f)
+            {
+                Vector2 separation = center - hit.collider.ClosestPoint(center);
+                if (separation.sqrMagnitude > 0.000001f) normal = separation.normalized;
+            }
+            if (Vector2.Dot(normal, direction) < -0.01f)
+                allowed = Mathf.Min(allowed, Mathf.Max(0f, hit.distance - 0.003f));
+        }
+        return allowed;
+    }
 
-        if (!caveDoor.activeInHierarchy) return true;
-
-        SpriteRenderer sr = caveDoor.GetComponent<SpriteRenderer>();
-        Collider2D col = caveDoor.GetComponent<Collider2D>();
-
-        bool hidden = sr != null && !sr.enabled;
-        bool noCollision = col == null || !col.enabled;
-
-        return hidden && noCollision;
+    private void SetCenter(Vector3 center)
+    {
+        Vector3 offset = animalBody.bounds.center - transform.position;
+        Vector3 position = center - offset;
+        position.z = transform.position.z;
+        transform.position = position;
+        Physics2D.SyncTransforms();
     }
 }

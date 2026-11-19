@@ -39,14 +39,14 @@ public sealed class StoneAbility : MonoBehaviour
             legacyReturn.enabled = false;
     }
 
-    public bool IsWeightOn(Bounds plate) => false;
-
+    public bool IsWeightOn(Bounds plate) => false;
+
     public void SetSelected(bool selected)
     {
         Recall();
         if (!selected) return;
         state = State.Ready;
-        stone.position = transform.position + new Vector3(followers.Facing * 0.85f, 0.35f, 0f);
+        stone.position = followers.SelectedPosition(stone);
     }
 
     private bool Hit()
@@ -66,7 +66,10 @@ public sealed class StoneAbility : MonoBehaviour
         if (state == State.Following)
         {
             if (Input.GetMouseButtonDown(0) && followers.CanSummonStone && player.CanToggleWing && Hit())
+            {
                 state = State.Ready;
+                stone.position = followers.SelectedPosition(stone);
+            }
             return;
         }
         if (state == State.Flying)
@@ -96,7 +99,7 @@ public sealed class StoneAbility : MonoBehaviour
             return;
         }
 
-        stone.position = transform.position + new Vector3(followers.Facing * 0.85f, 0.35f, 0f);
+        stone.position = followers.SelectedPosition(stone);
         if (Input.GetMouseButtonDown(0) && Hit())
         {
             press = Input.mousePosition;
@@ -142,32 +145,34 @@ public sealed class StoneAbility : MonoBehaviour
         });
         return hits;
     }
-
+
     private bool TryFindExit(Collider2D wall, Vector2 entry, Vector2 surfaceNormal, Rect view, out Vector3 exit)
     {
         exit = Vector3.zero;
-        CircleCollider2D ball = GetComponent<CircleCollider2D>();
-        float radius = ball.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
+        CapsuleCollider2D ball = GetComponent<CapsuleCollider2D>();
+        Vector2 halfSize = ball.bounds.extents;
+        Vector2 centerOffset = ball.bounds.center - transform.position;
         Vector2 exitDirection = surfaceNormal;
-        float startDistance = radius + 0.04f;
+        float startDistance = Mathf.Abs(surfaceNormal.x) * halfSize.x +
+            Mathf.Abs(surfaceNormal.y) * halfSize.y + 0.04f;
         float maxDistance = startDistance + 0.3f;
         for (float distance = startDistance; distance <= maxDistance; distance += 0.1f)
         {
             Vector2 candidate = entry + exitDirection * distance;
-            if (candidate.x - radius < view.xMin || candidate.x + radius > view.xMax ||
-                candidate.y - radius < view.yMin || candidate.y + radius > view.yMax)
+            if (candidate.x - halfSize.x < view.xMin || candidate.x + halfSize.x > view.xMax ||
+                candidate.y - halfSize.y < view.yMin || candidate.y + halfSize.y > view.yMax)
                 continue;
             if (wall.OverlapPoint(candidate))
                 continue;
             bool clear = true;
-            foreach (Collider2D other in Physics2D.OverlapCircleAll(candidate, radius + 0.02f))
+            foreach (Collider2D other in PlayerCapsuleShape.OverlapAll(ball, candidate, 0.02f))
             {
                 if (!other.isTrigger && other != ball && other.transform != stone &&
                     other.GetComponentInParent<SpiritLauncher>() == null)
                     clear = false;
             }
             if (!clear) continue;
-            exit = new Vector3(candidate.x, candidate.y, transform.position.z);
+            exit = new Vector3(candidate.x - centerOffset.x, candidate.y - centerOffset.y, transform.position.z);
             return true;
         }
         return false;
@@ -250,9 +255,9 @@ public sealed class StoneAbility : MonoBehaviour
             if (preview != null) preview.Hide();
         }
     }
-}
-
-
-
-
-
+}
+
+
+
+
+

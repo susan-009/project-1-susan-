@@ -36,7 +36,7 @@ internal static class AddGroundDragPlayer
         float diameter = 0.65f;
         Vector2 spriteSize = renderer.sprite.bounds.size;
         player.transform.localScale = new Vector3(diameter / spriteSize.x, diameter / spriteSize.y, 1f);
-        player.GetComponent<CircleCollider2D>().radius = spriteSize.x * 0.5f;
+        player.GetComponent<CapsuleCollider2D>().size = spriteSize;
         player.transform.position = new Vector3(floor.bounds.center.x, floor.bounds.max.y + diameter * 0.5f, ground.transform.position.z);
 
         SerializedObject settings = new SerializedObject(controller);
@@ -47,4 +47,4 @@ internal static class AddGroundDragPlayer
         EditorSceneManager.MarkSceneDirty(scene);
         Selection.activeGameObject = player;
     }
-}
+}

@@ -96,18 +96,17 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
         fireState = FireState.Following;
         stoneAbility.SetSelected(false);
 
-        Vector3 front = transform.position + new Vector3(facing * 0.85f, 0.35f, 0f);
         if (nextStone)
             stoneAbility.SetSelected(true);
         else if (nextWing)
         {
             player.SetWingActive(true);
-            wing.position = front;
+            wing.position = SelectedPosition(wing);
         }
         else
         {
             fireState = FireState.Ready;
-            fire.position = front;
+            fire.position = SelectedPosition(fire);
         }
     }
 
@@ -136,12 +135,18 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
         if (Input.GetMouseButtonDown(1))
         {
             if (player.IsWingActive)
-                wing.position = transform.position + new Vector3(facing * 0.85f, 0.35f, 0f);
+                wing.position = SelectedPosition(wing);
             return;
         }
         UpdateWing(movement == 0f);
         if (player == null || !player.IsWingActive)
             UpdateFire(movement == 0f);
+    }
+
+    public Vector3 SelectedPosition(Transform spirit)
+    {
+        Vector3 desired = transform.position + new Vector3(facing * 0.85f, 0.35f, 0f);
+        return SpiritHeldPosition.Resolve(transform, spirit, desired);
     }
 
     public bool IsPointerOnWing()
@@ -173,7 +178,7 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
         }
 
         if (player.IsWingActive)
-            wing.position = transform.position + new Vector3(facing * 0.85f, 0.35f, 0f);
+            wing.position = SelectedPosition(wing);
     }
 
     private void UpdateFire(bool playerStopped)
@@ -181,7 +186,7 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
         if (fire == null || fireSprite == null || aimCamera == null)
             return;
 
-        Vector3 readyPosition = transform.position + new Vector3(facing * 0.85f, 0.35f, 0f);
+        Vector3 readyPosition = SelectedPosition(fire);
         if (fireState == FireState.Flying)
         {
             flightTime = Mathf.Min(flightTime + Time.deltaTime, FlightDuration);

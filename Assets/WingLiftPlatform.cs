@@ -22,7 +22,7 @@ public sealed class WingLiftPlatform : MonoBehaviour
     {
         Bounds oldBounds = platform.bounds;
         bool carry = player != null && player.CanRideWingPlatform &&
-            player.TryGetComponent(out CircleCollider2D ball) &&
+            player.TryGetComponent(out CapsuleCollider2D ball) &&
             ball.bounds.max.x > oldBounds.min.x && ball.bounds.min.x < oldBounds.max.x &&
             Mathf.Abs(ball.bounds.min.y - oldBounds.max.y) < 0.035f;
 
@@ -42,4 +42,4 @@ public sealed class WingLiftPlatform : MonoBehaviour
             player.transform.position += Vector3.up * deltaY;
         Physics2D.SyncTransforms();
     }
-}
+}

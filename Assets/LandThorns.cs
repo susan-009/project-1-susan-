@@ -5,7 +5,7 @@ using UnityEngine;
 public sealed class LandThorns : MonoBehaviour
 {
     private GroundDragPlayer player;
-    private CircleCollider2D ball;
+    private CapsuleCollider2D ball;
     private Collider2D home;
     private GameObject bush;
     private BoxCollider2D thornCollider;
@@ -17,7 +17,7 @@ public sealed class LandThorns : MonoBehaviour
     private void Start()
     {
         player = GetComponent<GroundDragPlayer>();
-        ball = GetComponent<CircleCollider2D>();
+        ball = GetComponent<CapsuleCollider2D>();
         GameObject land = null;
         foreach (Transform item in FindObjectsOfType<Transform>())
             if (string.Equals(item.name.Trim(), "Land1", System.StringComparison.OrdinalIgnoreCase))
@@ -100,8 +100,7 @@ public sealed class LandThorns : MonoBehaviour
         filter.useTriggers = true;
         if (travel.sqrMagnitude > 0f && travel.sqrMagnitude < 9f)
         {
-            float radius = ball.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
-            Physics2D.CircleCast(previousCenter, radius, travel.normalized, filter, hits, travel.magnitude);
+            PlayerCapsuleShape.Sweep(ball, previousCenter, travel.normalized, filter, hits, travel.magnitude);
         }
         bool touched = ball.Distance(thornCollider).isOverlapped;
         foreach (RaycastHit2D hit in hits) touched |= hit.collider == thornCollider;
@@ -127,5 +126,5 @@ public sealed class LandThorns : MonoBehaviour
         if (mesh != null) Destroy(mesh);
         if (material != null) Destroy(material);
     }
-}
-
+}
+
