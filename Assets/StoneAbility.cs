@@ -74,6 +74,7 @@ public sealed class StoneAbility : MonoBehaviour
         }
         if (state == State.Flying)
         {
+            Physics2D.SyncTransforms();
             float step = Mathf.Min(14f * Time.deltaTime, remaining);
             foreach (RaycastHit2D hit in ShotHits(direction, step))
             {
@@ -81,16 +82,7 @@ public sealed class StoneAbility : MonoBehaviour
                     hit.collider.transform == stone ||
                     hit.collider.transform == transform || hit.collider.GetComponentInParent<SpiritLauncher>() != null)
                     continue;
-                EarthMechanismController mechanism = hit.collider.GetComponentInParent<EarthMechanismController>();
-                if (mechanism != null)
-                {
-                    if (mechanism.isActiveAndEnabled) mechanism.Activate();
-                    Recall();
-                    return;
-                }
-                if (TryFindExit(hit.collider, hit.point, hit.normal, launchView, out Vector3 exit))
-                    player.RelocateByStone(exit);
-                Recall();
+                HandleImpact(hit);
                 return;
             }
             stone.position += direction * step;
@@ -128,6 +120,22 @@ public sealed class StoneAbility : MonoBehaviour
                 state = State.Flying;
             }
         }
+    }
+
+    private void HandleImpact(RaycastHit2D hit)
+    {
+        EarthMechanismController mechanism = hit.collider.GetComponentInParent<EarthMechanismController>();
+        if (mechanism != null)
+        {
+            // A projectile contact activates the puzzle; the player stays in place.
+            if (mechanism.isActiveAndEnabled) mechanism.Activate();
+            Recall();
+            return;
+        }
+
+        if (TryFindExit(hit.collider, hit.point, hit.normal, launchView, out Vector3 exit))
+            player.RelocateByStone(exit);
+        Recall();
     }
 
     private RaycastHit2D[] ShotHits(Vector2 aim, float distance)

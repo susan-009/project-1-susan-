@@ -4,6 +4,7 @@ using UnityEngine;
 [DefaultExecutionOrder(900)]
 public sealed class MechanismStoneIndicator : MonoBehaviour
 {
+    public const int CurrentArtworkVersion = 3;
     public Sprite unlitSprite;
     public Sprite litSprite;
     [SerializeField] private SpriteRenderer display;
@@ -46,7 +47,7 @@ public sealed class MechanismStoneIndicator : MonoBehaviour
             display.color = Color.white;
         }
         // Refit existing displays once when upgrading the atlas; later manual edits are retained.
-        if (artworkVersion < 2)
+        if (artworkVersion < CurrentArtworkVersion)
         {
             BoxCollider2D body = GetComponent<BoxCollider2D>();
             if (body != null)
@@ -60,7 +61,7 @@ public sealed class MechanismStoneIndicator : MonoBehaviour
                     ? new Vector3(body.size.y / imageSize.x, body.size.x / imageSize.y, 1f)
                     : new Vector3(body.size.x / imageSize.x, body.size.y / imageSize.y, 1f);
             }
-            artworkVersion = 2;
+            artworkVersion = CurrentArtworkVersion;
         }
         if (original != null) original.enabled = false;
         display.sprite = unlitSprite;

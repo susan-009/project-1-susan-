@@ -100,10 +100,10 @@ TextureImporter:
       name: Mechanism_Off
       rect:
         serializedVersion: 2
-        x: 498
-        y: 100
-        width: 150
-        height: 834
+        x: 489
+        y: 62
+        width: 272
+        height: 816
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -121,10 +121,10 @@ TextureImporter:
       name: Mechanism_On
       rect:
         serializedVersion: 2
-        x: 883
-        y: 100
-        width: 150
-        height: 834
+        x: 912
+        y: 62
+        width: 272
+        height: 816
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -153,6 +153,6 @@ TextureImporter:
       Mechanism_On: 38711600
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
-  userData: MechanismLampVerticalV2
+  userData: MechanismLampVerticalV3
   assetBundleName: 
   assetBundleVariant: 
