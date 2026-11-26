@@ -33,6 +33,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     public void RelocateByStone(Vector3 position)
     {
+        if (IsLevelComplete) return;
         transform.position = position;
         targetX = position.x;
         wingSlamming = false;
@@ -47,6 +48,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     public void ReturnToLanding(Vector3 position)
     {
+        if (IsLevelComplete) return;
         RelocateByStone(position);
         stoneAnchored = false;
         wingAirborne = false;
@@ -58,6 +60,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     public void StartFalling()
     {
+        if (IsLevelComplete) return;
         stoneAnchored = false;
         wingAirborne = true;
         wingSlamming = false;
@@ -69,13 +72,26 @@ public sealed class GroundDragPlayer : MonoBehaviour
         Physics2D.SyncTransforms();
     }
 
-    public bool CanRideWingPlatform => isActiveAndEnabled && verticalSpeed <= 0f;
+    public bool CanRideWingPlatform => isActiveAndEnabled && !IsLevelComplete && verticalSpeed <= 0f;
+    public bool IsLevelComplete { get; private set; }
+    public void CompleteLevel()
+    {
+        if (IsLevelComplete) return;
+        IsLevelComplete = true;
+        SetWingActive(false);
+        verticalSpeed = 0f;
+        dashRemaining = 0f;
+        if (wingJumpDots != null)
+            foreach (SpriteRenderer dot in wingJumpDots) if (dot != null) dot.enabled = false;
+        foreach (TrajectoryPredictor trajectory in GetComponentsInChildren<TrajectoryPredictor>(true))
+            trajectory.Hide();
+    }
     public bool IsShowingPillars { get; private set; }
     public Camera FollowCamera => followCamera;
 
     public void ShowPillarAnimation(Bounds bounds, float duration, System.Action activate)
     {
-        if (IsShowingPillars) return;
+        if (IsLevelComplete || IsShowingPillars) return;
         StartCoroutine(PresentPillars(bounds, duration, activate));
     }
 
@@ -119,6 +135,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     public void SetWingActive(bool active)
     {
+        if (IsLevelComplete && active) return;
         wingActive = active;
         wingSlamming = false;
         wingPointerHeld = false;
@@ -166,7 +183,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     private void Update()
     {
-        if (IsShowingPillars) return;
+        if (IsLevelComplete || IsShowingPillars) return;
         // Ordinary forms use the current scene surfaces, just like a stone landing.
         if (!wingActive)
         {
@@ -479,6 +496,7 @@ public sealed class GroundDragPlayer : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (IsLevelComplete) return;
         UpdateCameraPosition(false);
         float top = playerCollider.bounds.max.y + 0.18f;
         for (int i = 0; i < wingJumpDots.Length; i++)

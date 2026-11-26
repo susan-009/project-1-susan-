@@ -19,6 +19,7 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
     private GroundDragPlayer player;
     private StoneAbility stoneAbility;
     public float Facing => facing;
+    public bool IsFireSelected => fireState != FireState.Following;
     public bool CanSummonStone => fireState == FireState.Following && player != null && !player.IsWingActive;
     private Transform wing;
     private SpriteRenderer wingSprite;
@@ -83,7 +84,7 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
 
     private void Update()
     {
-        if (!Input.GetMouseButtonDown(1) || player == null || player.IsShowingPillars ||
+        if (!Input.GetMouseButtonDown(1) || player == null || player.IsLevelComplete || player.IsShowingPillars ||
             fire == null || wing == null || stoneAbility == null)
             return;
 
@@ -112,6 +113,7 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (player != null && player.IsLevelComplete) return;
         Vector3 playerPosition = transform.position;
         float movement = playerPosition.x - previousX;
         if (movement != 0f)
@@ -275,10 +277,14 @@ public sealed class PlayerSpiritFollowers : MonoBehaviour
             return false;
 
         float radius = Mathf.Min(fireSprite.bounds.extents.x, fireSprite.bounds.extents.y);
+        Physics2D.SyncTransforms();
         foreach (RaycastHit2D hit in Physics2D.CircleCastAll(fire.position, radius, travel / distance, distance))
         {
             bool burnedThorns = hit.collider.TryGetComponent(out BurnableThorns thorns) && thorns.TryBurn();
-            bool burnedTorch = !burnedThorns && hit.collider.TryGetComponent(out TorchHandleActivator handle) && handle.TryBurn();
+            SensorTorch sensor = hit.collider.GetComponentInParent<SensorTorch>();
+            bool burnedTorch = !burnedThorns && sensor != null && sensor.TryIgnite();
+            if (!burnedThorns && !burnedTorch && sensor == null)
+                burnedTorch = hit.collider.TryGetComponent(out TorchHandleActivator handle) && handle.TryBurn();
             if (!burnedThorns && !burnedTorch) continue;
 
             fire.position = new Vector3(hit.centroid.x, hit.centroid.y, fire.position.z);

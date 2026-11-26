@@ -8,7 +8,7 @@ public sealed class CavePlayModeLighting : MonoBehaviour
 
     private void Awake()
     {
-        ambientLight.intensity = 0f;
-        playerLight.enabled = true;
+        if (ambientLight != null) ambientLight.intensity = 0f;
+        if (playerLight != null) playerLight.enabled = true;
     }
 }

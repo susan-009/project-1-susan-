@@ -1,5 +1,5 @@
-
 using System.Collections;
+using System.Linq;
 using UnityEngine;
 
 public class StonePillarController : MonoBehaviour
@@ -8,52 +8,55 @@ public class StonePillarController : MonoBehaviour
     public float sinkDistance = 3f;
     public float moveDuration = 0.8f;
 
-    private SpriteRenderer sr;
+    private SpriteRenderer prototypeRenderer;
+    private SpriteRenderer[] visualRenderers;
     private BoxCollider2D pillarCollider;
     private Vector3 raisedPosition;
     private Coroutine moveCoroutine;
     private bool isRaised;
+    private bool initialized;
 
-    void Awake()
+    private void Awake()
     {
-        sr = GetComponent<SpriteRenderer>();
+        Initialize();
+        SetRaisedImmediate(startVisible);
+    }
+
+    private void Initialize()
+    {
+        if (initialized) return;
+        prototypeRenderer = GetComponent<SpriteRenderer>();
         pillarCollider = GetComponent<BoxCollider2D>();
-
         raisedPosition = transform.position;
-        isRaised = startVisible;
+        // Imported art lives on child objects. Keep the old root block as a fallback
+        // only for legacy pillars without any child artwork.
+        visualRenderers = GetComponentsInChildren<SpriteRenderer>(true)
+            .Where(r => r != prototypeRenderer && r.sprite != null &&
+                r.GetComponentInParent<StonePillarController>() == this).ToArray();
+        if (visualRenderers.Length == 0 && prototypeRenderer != null)
+            visualRenderers = new[] { prototypeRenderer };
+        initialized = true;
+    }
 
-        if (sr == null || pillarCollider == null)
-        {
-            Debug.LogError("ʯ��ȱ�� Sprite Renderer �� Box Collider 2D");
-            return;
-        }
-
-        if (startVisible)
-        {
-            sr.enabled = true;
-            pillarCollider.enabled = true;
-        }
-        else
-        {
-            sr.enabled = false;
-            pillarCollider.enabled = false;
-            transform.position = raisedPosition
-                + Vector3.down * sinkDistance;
-        }
+    private void SetVisible(bool visible)
+    {
+        if (prototypeRenderer != null && !visualRenderers.Contains(prototypeRenderer))
+            prototypeRenderer.enabled = false;
+        foreach (SpriteRenderer renderer in visualRenderers)
+            if (renderer != null) renderer.enabled = visible;
+        if (pillarCollider != null) pillarCollider.enabled = visible;
     }
 
     public bool IsRaised => isRaised;
 
-    // Used once at puzzle startup, after every pillar has initialized in Awake.
     public void SetRaisedImmediate(bool raised)
     {
-        if (sr == null || pillarCollider == null) return;
+        Initialize();
         if (moveCoroutine != null) StopCoroutine(moveCoroutine);
         moveCoroutine = null;
         isRaised = raised;
         transform.position = raisedPosition + (raised ? Vector3.zero : Vector3.down * sinkDistance);
-        sr.enabled = raised;
-        pillarCollider.enabled = raised;
+        SetVisible(raised);
         Physics2D.SyncTransforms();
     }
 
@@ -61,76 +64,49 @@ public class StonePillarController : MonoBehaviour
     {
         get
         {
-            Vector3 size = sr != null ? sr.bounds.size : Vector3.one;
+            Vector3 size = Vector3.one;
+            if (pillarCollider != null)
+            {
+                // Collider.bounds becomes empty when a lowered pillar disables it.
+                // Keep framing based on the authored shape throughout the puzzle.
+                Vector3 right = transform.TransformVector(Vector3.right * pillarCollider.size.x);
+                Vector3 up = transform.TransformVector(Vector3.up * pillarCollider.size.y);
+                size = new Vector3(Mathf.Abs(right.x) + Mathf.Abs(up.x), Mathf.Abs(right.y) + Mathf.Abs(up.y), 0f);
+            }
             Bounds bounds = new Bounds(raisedPosition, size);
             bounds.Encapsulate(new Bounds(raisedPosition + Vector3.down * sinkDistance, size));
             return bounds;
         }
     }
 
-    public void Raise()
+    public void Raise() { MovePillar(true); }
+    public void Lower() { MovePillar(false); }
+    public void Toggle() { MovePillar(!isRaised); }
+
+    private void MovePillar(bool rise)
     {
-        MovePillar(true);
-    }
-
-    public void Lower()
-    {
-        MovePillar(false);
-    }
-
-    public void Toggle()
-    {
-        if (isRaised)
-            Lower();
-        else
-            Raise();
-    }
-
-    void MovePillar(bool rise)
-    {
-        if (sr == null || pillarCollider == null)
-            return;
-
-        if (moveCoroutine != null)
-            StopCoroutine(moveCoroutine);
-
+        Initialize();
+        if (pillarCollider == null || visualRenderers.Length == 0) return;
+        if (moveCoroutine != null) StopCoroutine(moveCoroutine);
         isRaised = rise;
-
-        sr.enabled = true;
-        pillarCollider.enabled = true;
-
-        Vector3 target = rise
-            ? raisedPosition
-            : raisedPosition + Vector3.down * sinkDistance;
-
-        moveCoroutine = StartCoroutine(
-            MoveAnimation(target, rise)
-        );
+        SetVisible(true);
+        Vector3 target = rise ? raisedPosition : raisedPosition + Vector3.down * sinkDistance;
+        moveCoroutine = StartCoroutine(MoveAnimation(target, rise));
     }
 
-    IEnumerator MoveAnimation(Vector3 target, bool visible)
+    private IEnumerator MoveAnimation(Vector3 target, bool visible)
     {
         Vector3 start = transform.position;
-        float time = 0;
-
+        float time = 0f;
         while (time < moveDuration)
         {
             time += Time.deltaTime;
-
-            float t = Mathf.Clamp01(time / moveDuration);
-
-            transform.position = Vector3.Lerp(start, target, t);
-
+            transform.position = Vector3.Lerp(start, target, Mathf.Clamp01(time / moveDuration));
             yield return null;
         }
-
         transform.position = target;
-
-        sr.enabled = visible;
-        pillarCollider.enabled = visible;
-
+        SetVisible(visible);
+        Physics2D.SyncTransforms();
         moveCoroutine = null;
     }
 }
-
-

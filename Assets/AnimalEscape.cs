@@ -4,28 +4,23 @@ using UnityEngine;
 [DefaultExecutionOrder(700)]
 public class AnimalEscape : MonoBehaviour
 {
-    // Keep old scene references compatible. Contact now controls pickup.
+    // Preserve old scene references; completion no longer depends on an exit or pillars.
     [HideInInspector] public GameObject[] pillars;
     [HideInInspector] public GameObject caveDoor;
     [HideInInspector] public Transform exitPoint;
 
-    [Header("跟随设置")]
-    [Min(0.1f)] public float moveSpeed = 2f;
-    [SerializeField, Min(0.1f)] private float followDistance = 0.6f;
-
-    private bool accompanying;
+    public bool IsCompleted { get; private set; }
     private GroundDragPlayer player;
     private CapsuleCollider2D playerBody;
     private CircleCollider2D animalBody;
     private Vector2 previousPlayerCenter;
-    private Vector3 previousTarget;
-    private float pathLength;
-    private readonly Queue<Vector3> path = new Queue<Vector3>();
     private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>();
 
-    private void Start()
+    private void Start() { Initialize(FindObjectOfType<GroundDragPlayer>()); }
+
+    public void Initialize(GroundDragPlayer owner)
     {
-        player = FindObjectOfType<GroundDragPlayer>();
+        player = owner;
         if (player == null) return;
         playerBody = player.GetComponent<CapsuleCollider2D>();
         animalBody = GetComponent<CircleCollider2D>();
@@ -44,108 +39,48 @@ public class AnimalEscape : MonoBehaviour
         if (playerBody != null) previousPlayerCenter = playerBody.bounds.center;
     }
 
-    private Vector3 FollowTarget()
-    {
-        return new Vector3(playerBody.bounds.center.x,
-            playerBody.bounds.min.y + animalBody.bounds.extents.y + 0.005f, transform.position.z);
-    }
+    private void LateUpdate() { TryCompleteOnContact(); }
 
-    private void LateUpdate()
+    public bool TryCompleteOnContact()
     {
-        if (playerBody == null || animalBody == null) return;
+        if (IsCompleted || player == null || player.IsLevelComplete || playerBody == null ||
+            animalBody == null || !playerBody.enabled || !animalBody.enabled ||
+            !playerBody.gameObject.activeInHierarchy || !animalBody.gameObject.activeInHierarchy) return false;
         Physics2D.SyncTransforms();
         Vector2 playerCenter = playerBody.bounds.center;
         Vector2 travel = playerCenter - previousPlayerCenter;
+        bool touched = playerBody.Distance(animalBody).distance <= 0.01f;
+        if (!touched && travel.sqrMagnitude > 0.000001f && travel.sqrMagnitude < 9f)
+        {
+            ContactFilter2D filter = new ContactFilter2D();
+            filter.NoFilter();
+            filter.useTriggers = true;
+            hits.Clear();
+            PlayerCapsuleShape.Sweep(playerBody, previousPlayerCenter, travel.normalized,
+                filter, hits, travel.magnitude);
+            foreach (RaycastHit2D hit in hits) if (hit.collider == animalBody) touched = true;
+        }
         previousPlayerCenter = playerCenter;
-
-        if (!accompanying)
-        {
-            bool touched = playerBody.Distance(animalBody).distance <= 0.01f;
-            if (!touched && travel.sqrMagnitude > 0.000001f && travel.sqrMagnitude < 9f)
-            {
-                ContactFilter2D filter = new ContactFilter2D();
-                filter.NoFilter();
-                filter.useTriggers = true;
-                hits.Clear();
-                PlayerCapsuleShape.Sweep(playerBody, playerCenter - travel, travel.normalized,
-                    filter, hits, travel.magnitude);
-                foreach (RaycastHit2D hit in hits) if (hit.collider == animalBody) touched = true;
-            }
-            if (!touched) return;
-            accompanying = true;
-            previousTarget = FollowTarget();
-            path.Enqueue(previousTarget);
-            pathLength = Vector3.Distance(animalBody.bounds.center, previousTarget);
-        }
-
-        Vector3 target = FollowTarget();
-        float travelled = Vector3.Distance(previousTarget, target);
-        if (travelled > 3f)
-        {
-            // Respawns and Stone relocations are discontinuities, not walkable paths.
-            SetCenter(target);
-            path.Clear();
-            pathLength = 0f;
-            previousTarget = target;
-            return;
-        }
-        if (travelled > 0.01f)
-        {
-            path.Enqueue(target);
-            pathLength += travelled;
-            previousTarget = target;
-        }
-        if (player.IsShowingPillars) return;
-
-        // Match fast player movement so sprinting never breaks the follow state.
-        float budget = Mathf.Min(Mathf.Max(0f, pathLength - followDistance),
-            Mathf.Max(moveSpeed * Time.deltaTime, travelled));
-        int iterations = 0;
-        while (path.Count > 0 && budget > 0f && iterations++ < 128)
-        {
-            Vector3 center = animalBody.bounds.center;
-            Vector3 next = path.Peek();
-            Vector2 step = next - center;
-            float distance = step.magnitude;
-            if (distance < 0.0001f) { path.Dequeue(); continue; }
-            float requested = Mathf.Min(distance, budget);
-            float allowed = ClearDistance(center, step / distance, requested);
-            if (allowed <= 0.00001f) break;
-            SetCenter(center + (Vector3)(step / distance * allowed));
-            pathLength = Mathf.Max(0f, pathLength - allowed);
-            budget -= allowed;
-            if (allowed + 0.0001f >= distance) path.Dequeue();
-            if (allowed + 0.0001f < requested) break;
-        }
+        if (!touched) return false;
+        IsCompleted = true;
+        player.CompleteLevel();
+        return true;
     }
 
-    private float ClearDistance(Vector2 center, Vector2 direction, float distance)
+    private void OnGUI()
     {
-        float radius = Mathf.Min(animalBody.bounds.extents.x, animalBody.bounds.extents.y);
-        float allowed = distance;
-        foreach (RaycastHit2D hit in Physics2D.CircleCastAll(center, Mathf.Max(0.001f, radius - 0.003f),
-            direction, distance + 0.003f))
-        {
-            if (hit.collider.isTrigger || hit.collider.transform.IsChildOf(transform) ||
-                hit.collider.transform.IsChildOf(player.transform)) continue;
-            Vector2 normal = hit.normal;
-            if (hit.distance < 0.0001f)
-            {
-                Vector2 separation = center - hit.collider.ClosestPoint(center);
-                if (separation.sqrMagnitude > 0.000001f) normal = separation.normalized;
-            }
-            if (Vector2.Dot(normal, direction) < -0.01f)
-                allowed = Mathf.Min(allowed, Mathf.Max(0f, hit.distance - 0.003f));
-        }
-        return allowed;
-    }
-
-    private void SetCenter(Vector3 center)
-    {
-        Vector3 offset = animalBody.bounds.center - transform.position;
-        Vector3 position = center - offset;
-        position.z = transform.position.z;
-        transform.position = position;
-        Physics2D.SyncTransforms();
+        if (!IsCompleted) return;
+        float width = Mathf.Min(420f, Screen.width - 24f);
+        Rect panel = new Rect((Screen.width - width) * 0.5f, Screen.height * 0.3f, width, 140f);
+        Color previous = GUI.backgroundColor;
+        GUI.backgroundColor = new Color(0.08f, 0.14f, 0.23f, 0.96f);
+        GUI.Box(panel, GUIContent.none);
+        GUI.backgroundColor = previous;
+        var title = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 32 };
+        title.normal.textColor = new Color(1f, 0.85f, 0.4f);
+        GUI.Label(new Rect(panel.x, panel.y + 15f, width, 60f), "通关成功！", title);
+        var detail = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 20 };
+        detail.normal.textColor = Color.white;
+        GUI.Label(new Rect(panel.x, panel.y + 80f, width, 40f), "已找到小兔子", detail);
     }
 }

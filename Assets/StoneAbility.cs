@@ -61,7 +61,7 @@ public sealed class StoneAbility : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (stone == null || player == null || player.IsShowingPillars || cameraView == null || Input.GetMouseButtonDown(1))
+        if (stone == null || player == null || player.IsLevelComplete || player.IsShowingPillars || cameraView == null || Input.GetMouseButtonDown(1))
             return;
         if (state == State.Following)
         {
