@@ -9,6 +9,16 @@ public class AnimalEscape : MonoBehaviour
     [HideInInspector] public GameObject caveDoor;
     [HideInInspector] public Transform exitPoint;
 
+    [SerializeField] private SpriteRenderer patrolSprite;
+    [SerializeField, Min(0f)] private float patrolSpeed = 2f;
+    [SerializeField, Min(0f)] private float turnPause = 0.2f;
+
+    private const float LeftX = -4.61f;
+    private const float RightX = -2.37f;
+    private bool movingRight = true;
+    private bool originalFlip;
+    private float resumeTime;
+
     public bool IsCompleted { get; private set; }
     private GroundDragPlayer player;
     private CapsuleCollider2D playerBody;
@@ -16,7 +26,33 @@ public class AnimalEscape : MonoBehaviour
     private Vector2 previousPlayerCenter;
     private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>();
 
-    private void Start() { Initialize(FindObjectOfType<GroundDragPlayer>()); }
+    private void Start()
+    {
+        if (patrolSprite != null)
+        {
+            originalFlip = patrolSprite.flipX;
+            Vector3 position = transform.localPosition;
+            position.x = LeftX;
+            transform.localPosition = position;
+        }
+        Initialize(FindObjectOfType<GroundDragPlayer>());
+    }
+
+    private void Update()
+    {
+        if (patrolSprite == null || patrolSpeed <= 0f || Time.time < resumeTime) return;
+
+        Vector3 position = transform.localPosition;
+        float targetX = movingRight ? RightX : LeftX;
+        patrolSprite.flipX = originalFlip ^ !movingRight;
+        position.x = Mathf.MoveTowards(position.x, targetX, patrolSpeed * Time.deltaTime);
+        transform.localPosition = position;
+        if (position.x == targetX)
+        {
+            movingRight = !movingRight;
+            resumeTime = Time.time + turnPause;
+        }
+    }
 
     public void Initialize(GroundDragPlayer owner)
     {
